@@ -1,0 +1,245 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Second Brain — Full Ingest UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1000px; }
+    .row { display:flex; gap:12px; align-items:flex-start; }
+    .col { flex:1; min-width: 260px; }
+    .box { padding:12px; border:1px solid #e6e6e6; border-radius:8px; margin-bottom:12px; background:#fff;}
+    input[type="file"] { display:block; margin-top:6px; }
+    textarea { width:100%; height:90px; margin-top:6px; }
+    button { padding:8px 12px; border-radius:6px; border:none; background:#007bff; color:white; cursor:pointer; }
+    button.secondary { background:#6c757d; }
+    pre { white-space:pre-wrap; word-break:break-word; background:#f8f9fa; padding:8px; border-radius:6px; }
+    small.muted { color:#666; display:block; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h1>Second Brain — Ingest & Query</h1>
+
+  <div class="row">
+    <div class="col">
+      <div class="box">
+        <h3>Upload PDF</h3>
+        <input id="pdfFile" type="file" accept="application/pdf" />
+        <div style="margin-top:8px;">
+          <button onclick="uploadPdf()">Upload PDF</button>
+          <button class="secondary" onclick="fillExamplePdf()">Example PDF</button>
+        </div>
+        <small class="muted" id="pdfStatus">No PDF uploaded</small>
+        <div id="pdfResult"></div>
+      </div>
+
+      <div class="box">
+        <h3>Upload Audio</h3>
+        <input id="audioFile" type="file" accept="audio/*" />
+        <div style="margin-top:8px;">
+          <button onclick="uploadAudio()">Upload Audio</button>
+          <button class="secondary" onclick="fillExampleAudio()">Example Audio</button>
+        </div>
+        <small class="muted" id="audioStatus">No audio uploaded</small>
+        <div id="audioResult"></div>
+      </div>
+
+      <div class="box">
+        <h3>Upload Image (OCR)</h3>
+        <input id="imageFile" type="file" accept="image/*" />
+        <div style="margin-top:8px;">
+          <button onclick="uploadImage()">Upload Image</button>
+        </div>
+        <small class="muted" id="imageStatus">No image uploaded</small>
+        <div id="imageResult"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="box">
+        <h3>Ingest URL (scrape)</h3>
+        <input id="urlInput" placeholder="https://example.com/article" />
+        <div style="margin-top:8px;">
+          <button onclick="ingestUrl()">Ingest URL</button>
+          <button class="secondary" onclick="fillExampleUrl()">Example URL</button>
+        </div>
+        <small class="muted" id="urlStatus">No URL ingested</small>
+        <div id="urlResult"></div>
+      </div>
+
+      <div class="box">
+        <h3>Paste Plain Text</h3>
+        <textarea id="textInput" placeholder="Paste notes or text here..."></textarea>
+        <input id="textFilename" placeholder="filename (optional)" style="margin-top:6px; width:100%;" />
+        <div style="margin-top:8px;">
+          <button onclick="ingestText()">Ingest Text</button>
+          <button class="secondary" onclick="fillExampleText()">Example Text</button>
+        </div>
+        <small class="muted" id="textStatus">No text ingested</small>
+        <div id="textResult"></div>
+      </div>
+
+      <div class="box">
+        <h3>Quick Demo Controls</h3>
+        <button onclick="runQuickDemo()">Run Quick Demo (ingest sample + sample query)</button>
+        <small class="muted">Use after uploading or when you have sample files</small>
+        <div id="demoResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>Ask a question (over all ingested content)</h3>
+    <textarea id="question">Summarize the key points from the uploaded documents.</textarea>
+    <div style="margin-top:8px;">
+      <button onclick="ask()">Ask</button>
+      <button class="secondary" onclick="clearResults()">Clear Results</button>
+    </div>
+  </div>
+
+  <div class="box" id="answerBox" style="display:none;">
+    <h3>Answer</h3>
+    <div id="answerText"><em>Answer will appear here</em></div>
+    <h4 style="margin-top:12px;">Sources</h4>
+    <div id="sourcesList"></div>
+  </div>
+
+<script>
+// --- Utility helpers ---
+function elt(id){ return document.getElementById(id); }
+function showStatus(id, txt){ elt(id).innerText = txt; }
+function showResult(id, html){ elt(id).innerHTML = html; }
+function escapeHtml(s){ if(!s && s !== "") return ""; return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+// --- Upload handlers ---
+async function uploadPdf(){
+  const f = elt("pdfFile").files[0];
+  if(!f){ showStatus("pdfStatus", "Select a PDF first."); return; }
+  if(f.type !== "application/pdf"){ showStatus("pdfStatus", "File is not a PDF."); return; }
+  showStatus("pdfStatus", `Uploading ${f.name}...`);
+  const form = new FormData(); form.append("file", f);
+  try{
+    const resp = await fetch("/ingest/pdf", { method: "POST", body: form });
+    if(!resp.ok){ const t = await resp.text(); showStatus("pdfStatus", `Upload failed: ${resp.status} ${t}`); return; }
+    const data = await resp.json();
+    showStatus("pdfStatus", `Ingested ${f.name}`);
+    showResult("pdfResult", `<pre>${JSON.stringify(data,null,2)}</pre>`);
+  }catch(err){ showStatus("pdfStatus", "Upload error: "+err.message); }
+}
+
+async function uploadAudio(){
+  const f = elt("audioFile").files[0];
+  if(!f){ showStatus("audioStatus","Select an audio file."); return; }
+  showStatus("audioStatus", `Uploading ${f.name}...`);
+  const form = new FormData(); form.append("file", f);
+  try{
+    const resp = await fetch("/ingest/audio", { method: "POST", body: form });
+    if(!resp.ok){ const t=await resp.text(); showStatus("audioStatus", `Upload failed: ${resp.status} ${t}`); return; }
+    const data = await resp.json();
+    showStatus("audioStatus", `Ingested ${f.name}`);
+    showResult("audioResult", `<pre>${JSON.stringify(data,null,2)}</pre>`);
+  }catch(err){ showStatus("audioStatus","Upload error: "+err.message); }
+}
+
+async function uploadImage(){
+  const f = elt("imageFile").files[0];
+  if(!f){ showStatus("imageStatus","Select an image file."); return; }
+  showStatus("imageStatus", `Uploading ${f.name}...`);
+  const form = new FormData(); form.append("file", f);
+  try{
+    const resp = await fetch("/ingest/image", { method: "POST", body: form });
+    if(!resp.ok){ const t=await resp.text(); showStatus("imageStatus", `Upload failed: ${resp.status} ${t}`); return; }
+    const data = await resp.json();
+    showStatus("imageStatus", `Ingested ${f.name}`);
+    showResult("imageResult", `<pre>${JSON.stringify(data,null,2)}</pre>`);
+  }catch(err){ showStatus("imageStatus","Upload error: "+err.message); }
+}
+
+async function ingestUrl(){
+  const url = elt("urlInput").value.trim();
+  if(!url){ showStatus("urlStatus","Enter a URL first."); return; }
+  showStatus("urlStatus", `Ingesting ${url} ...`);
+  try{
+    const resp = await fetch("/ingest/url", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url}) });
+    if(!resp.ok){ const t=await resp.text(); showStatus("urlStatus", `Ingest failed: ${resp.status} ${t}`); return; }
+    const data = await resp.json();
+    showStatus("urlStatus", `Ingested URL`);
+    showResult("urlResult", `<pre>${JSON.stringify(data,null,2)}</pre>`);
+  }catch(err){ showStatus("urlStatus","Ingest error: "+err.message); }
+}
+
+async function ingestText(){
+  const text = elt("textInput").value;
+  const filename = elt("textFilename").value || `pasted_${Date.now()}.txt`;
+  if(!text || text.trim().length < 5){ showStatus("textStatus","Paste some text first."); return; }
+  showStatus("textStatus", `Ingesting text...`);
+  try{
+    const resp = await fetch("/ingest/text", { method:"POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({text, filename}) });
+    if(!resp.ok){ const t=await resp.text(); showStatus("textStatus", `Ingest failed: ${resp.status} ${t}`); return; }
+    const data = await resp.json();
+    showStatus("textStatus", `Ingested text as ${filename}`);
+    showResult("textResult", `<pre>${JSON.stringify(data,null,2)}</pre>`);
+  }catch(err){ showStatus("textStatus","Ingest error: "+err.message); }
+}
+
+// --- Query UI ---
+async function ask(){
+  const q = elt("question").value;
+  if(!q || q.trim() === ""){ alert("Type a question"); return; }
+  elt("answerBox").style.display = "block";
+  elt("answerText").innerText = "Thinking...";
+  elt("sourcesList").innerHTML = "";
+  try{
+    const resp = await fetch("/query", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({q, top_k:6}) });
+    if(!resp.ok){ const t = await resp.text(); elt("answerText").innerText = `Query failed: ${resp.status} ${t}`; return; }
+    const data = await resp.json();
+    elt("answerText").innerText = data.answer || "No answer returned.";
+    const src = data.sources || [];
+    if(src.length === 0){
+      elt("sourcesList").innerHTML = "<i>No sources returned.</i>";
+    } else {
+      elt("sourcesList").innerHTML = src.map(s => `
+        <div style="border:1px solid #eee; padding:8px; margin-bottom:8px;">
+          <b>${escapeHtml(s.filename || s.doc_id)} (${escapeHtml(s.type || '—')})</b><br/>
+          <small>score: ${s.score ? Number(s.score).toFixed(3) : '—'} | page: ${escapeHtml(s.page || '—')} | ts: ${escapeHtml(s.timestamp || '—')}</small>
+          <pre>${escapeHtml(s.snippet || '')}</pre>
+        </div>
+      `).join("");
+    }
+  }catch(err){
+    elt("answerText").innerText = "Error: "+err.message;
+    elt("sourcesList").innerHTML = "";
+  }
+}
+
+function clearResults(){
+  elt("answerText").innerHTML = "";
+  elt("sourcesList").innerHTML = "";
+  elt("answerBox").style.display = "none";
+  ["pdfResult","audioResult","imageResult","urlResult","textResult","demoResult"].forEach(id => showResult(id,""));
+  ["pdfStatus","audioStatus","imageStatus","urlStatus","textStatus"].forEach(id => showStatus(id, ""));
+}
+
+// --- Quick demo helpers (fills inputs if you want) ---
+function fillExamplePdf(){ alert("Place a sample PDF file in the upload control or choose one from disk."); }
+function fillExampleAudio(){ alert("Place a short audio file (30-90s) in the audio upload control."); }
+function fillExampleUrl(){ elt("urlInput").value = "https://www.example.com/"; }
+function fillExampleText(){ elt("textInput").value = "These are sample notes about the project. The meeting decided to prioritize ingestion and retrieval. Action items: A,B,C."; elt("textFilename").value = "notes_sample.txt"; }
+
+async function runQuickDemo(){
+  showResult("demoResult","Running quick demo: posting pasted text and querying it...");
+  // ingest demo text
+  elt("textInput").value = "Demo note: our roadmap includes PDF ingestion, audio transcription and search. Key item: finalize embeddings.";
+  elt("textFilename").value = "quick_demo_note.txt";
+  await ingestText();
+  // small delay to let backend index
+  await new Promise(r=>setTimeout(r, 1200));
+  // query
+  elt("question").value = "What are the key items in the demo note?";
+  await ask();
+  showResult("demoResult", "<b>Quick demo complete.</b>");
+}
+
+// --- Example fills for convenience if needed ---
+</script>
+</body>
+</html>
