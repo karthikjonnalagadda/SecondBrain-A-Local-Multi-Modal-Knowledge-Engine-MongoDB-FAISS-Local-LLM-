@@ -17,3 +17,13 @@ Self-hosted minimal multi-modal personal knowledge base:
 ```bash
 git clone <repo> second-brain-mongo-no-openai
 cd second-brain-mongo-no-openai
+## 📸 Screenshots
+
+### 🖼️ Home UI
+![Home UI](screenshots/home.png)
+
+### 🧠 Query Answer
+![Query Screenshot](screenshots/query_result.png)
+
+### 📤 Upload Section
+![Upload Area](screenshots/upload_area.png)
